@@ -3,3 +3,4 @@ Werkzeug==2.3.4
 authlib
 python-dotenv
 requests
+pymongo

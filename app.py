@@ -1,7 +1,8 @@
 import os
-from flask import Flask, render_template, redirect, url_for, session
+from flask import Flask, render_template, redirect, url_for, session, request, jsonify
 from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
+from pymongo import MongoClient
 
 load_dotenv()
 
@@ -17,6 +18,19 @@ google = oauth.register(
     api_base_url='https://www.googleapis.com/oauth2/v1/',
     client_kwargs={'scope': 'openid email profile'},
 )
+
+# MongoDB connection
+MONGO_URI = os.getenv('MONGO_URI')
+client = MongoClient(MONGO_URI)
+
+try:
+    client.admin.command('ping')
+    print("Connected to MongoDB!")
+except Exception as e:
+    print(f"Error: {e}")
+
+db = client['tdmmdzDev']
+users_collection = db['users']
 
 @app.route('/')
 def index():
@@ -38,6 +52,36 @@ def dashboard():
 def logout():
     session.pop('user_info', None)
     return redirect(url_for('index'))
+
+# Create a new user
+@app.route('/users', methods=['POST'])
+def create_user():
+    data = request.json
+    user_id = users_collection.insert_one(data).inserted_id
+    return jsonify({'message': 'User created', 'user_id': str(user_id)}), 201
+
+# Read all users
+@app.route('/users', methods=['GET'])
+def get_users():
+    users = list(users_collection.find({}, {'_id': 0}))  # Exclude MongoDB's _id field
+    return jsonify(users), 200
+
+# Update a user
+@app.route('/users/<string:email>', methods=['PUT'])
+def update_user(email):
+    data = request.json
+    result = users_collection.update_one({'email': email}, {'$set': data})
+    if result.matched_count == 0:
+        return jsonify({'message': 'User not found'}), 404
+    return jsonify({'message': 'User updated'}), 200
+
+# Delete a user
+@app.route('/users/<string:email>', methods=['DELETE'])
+def delete_user(email):
+    result = users_collection.delete_one({'email': email})
+    if result.deleted_count == 0:
+        return jsonify({'message': 'User not found'}), 404
+    return jsonify({'message': 'User deleted'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)
